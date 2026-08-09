@@ -15,6 +15,14 @@ import (
 )
 
 func main() {
+
+	if len(os.Args) >= 2 &&
+		(os.Args[1] == "-h" || os.Args[1] == "--help") {
+
+		cli.PrintHelp()
+		return
+	}
+
 	_ = godotenv.Load()
 	cnf, err := config.Load()
 	if err != nil {
@@ -26,8 +34,8 @@ func main() {
 
 	llmClient := llm.New(
 		cnf.OpenRouterAPIKey,
-		cnf.AgentModel,
-		cnf.AgentLanguage,
+		cnf.Model,
+		cnf.Language,
 	)
 
 	ag := agent.New(llmClient)
