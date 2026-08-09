@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+
 	"aider/internal/executor"
 	"aider/internal/llm"
-	"fmt"
+	"aider/internal/security"
 )
 
 type Agent struct {
@@ -16,23 +20,58 @@ func New(llmClient *llm.Client) Agent {
 	}
 }
 
-func (a Agent) Explain(errorText string) error {
+func (a Agent) Explain(
+	ctx context.Context,
+	errorText string,
+) (*Solution, error) {
 	fmt.Println("[agent] Analyzing error...")
 	fmt.Println()
 
-	response, err := a.llm.Analyze(errorText)
+	response, err := a.llm.Analyze(
+		context.Background(),
+		errorText,
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	fmt.Println(response)
+	var solution Solution
 
-	return nil
+	if err := json.Unmarshal(
+		[]byte(response),
+		&solution,
+	); err != nil {
+		return nil, fmt.Errorf(
+			"failed to parse LLM response: %w\nresponse: %s",
+			err,
+			response,
+		)
+	}
+
+	return &solution, nil
 }
 
-func (a Agent) Analyze(result executor.Result) error {
+func (a *Agent) Analyze(
+	ctx context.Context,
+	result executor.Result,
+) error {
+
 	fmt.Println("[agent] Analyzing error...")
 	fmt.Println()
+
+	stdout := security.Redact(
+		security.LimitOutput(
+			result.Stdout,
+			32*1024,
+		),
+	)
+
+	stderr := security.Redact(
+		security.LimitOutput(
+			result.Stderr,
+			32*1024,
+		),
+	)
 
 	errorText := fmt.Sprintf(
 		`Command:
@@ -48,11 +87,15 @@ Stderr:
 %s`,
 		result.Command,
 		result.ExitCode,
-		result.Stdout,
-		result.Stderr,
+		stdout,
+		stderr,
 	)
 
-	response, err := a.llm.Analyze(errorText)
+	response, err := a.llm.Analyze(
+		ctx,
+		errorText,
+	)
+
 	if err != nil {
 		return err
 	}
