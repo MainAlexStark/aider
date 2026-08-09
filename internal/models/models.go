@@ -13,7 +13,7 @@ type Analysis struct {
 	Problem     string   `json:"problem"`
 	Explanation string   `json:"explanation"`
 	Confidence  float64  `json:"confidence"`
-	Risk        string   `json:"risk"`
+	Risk        Risk     `json:"risk"`
 	Actions     []Action `json:"actions"`
 }
 

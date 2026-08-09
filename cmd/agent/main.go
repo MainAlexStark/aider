@@ -38,11 +38,29 @@ func main() {
 		cnf.Language,
 	)
 
-	exec := executor.New()
+	executionContext, err := executor.NewExecutionContext()
+	if err != nil {
+		fmt.Fprintln(
+			os.Stderr,
+			"failed to create execution context:",
+			err,
+		)
+
+		os.Exit(1)
+	}
+
+	exec := executor.New(
+		executionContext,
+	)
 
 	policy := security.DefaultPolicy()
 
-	ag := agent.New(llmClient, exec, policy)
+	ag := agent.New(
+		llmClient,
+		exec,
+		executionContext,
+		policy,
+	)
 
 	app := cli.New(
 		ag,

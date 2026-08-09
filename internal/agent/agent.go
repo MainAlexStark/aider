@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"aider/internal/executor"
@@ -15,52 +16,60 @@ import (
 const MaxIterations = 5
 
 type Agent struct {
-	llm      *llm.Client
-	policy   security.Policy
-	executor *executor.Executor
+	llm              *llm.Client
+	executor         *executor.Executor
+	executionContext *executor.ExecutionContext
+	policy           security.Policy
 }
 
 func New(
 	llmClient *llm.Client,
 	executor *executor.Executor,
+	executionContext *executor.ExecutionContext,
 	policy security.Policy,
 ) *Agent {
 	return &Agent{
-		llm:      llmClient,
-		executor: executor,
-		policy:   policy,
+		llm:              llmClient,
+		executor:         executor,
+		executionContext: executionContext,
+		policy:           policy,
 	}
 }
 
-func (a Agent) Explain(
+func (a *Agent) Explain(
 	ctx context.Context,
 	errorText string,
 ) (*models.Solution, error) {
 	fmt.Println("[agent] Analyzing error...")
 	fmt.Println()
 
-	response, err := a.llm.Analyze(
-		context.Background(),
+	analysis, err := a.llm.Analyze(
+		ctx,
 		errorText,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	var solution models.Solution
+	solution := models.Solution{
+		Problem:     analysis.Problem,
+		Explanation: analysis.Explanation,
+		Confidence:  analysis.Confidence,
+		Risk:        analysis.Risk,
+	}
 
-	if err := json.Unmarshal(
-		[]byte(response),
-		&solution,
-	); err != nil {
-		return nil, fmt.Errorf(
-			"failed to parse LLM response: %w\nresponse: %s",
-			err,
-			response,
+	for _, action := range analysis.Actions {
+		solution.Actions = append(
+			solution.Actions,
+			models.Action{
+				Command: action.Command,
+				Reason:  action.Reason,
+			},
 		)
 	}
 
 	return &solution, nil
+
 }
 
 func (a *Agent) Analyze(
@@ -283,7 +292,11 @@ func (a *Agent) analyzeResult(
 ) (models.Analysis, error) {
 
 	errorText := fmt.Sprintf(
-		`Command:
+		`Current working directory:
+%s
+
+
+Command:
 %s
 
 Exit code:
@@ -294,6 +307,7 @@ Stdout:
 
 Stderr:
 %s`,
+		a.executionContext.WorkingDirectory,
 		result.Command,
 		result.ExitCode,
 		security.Redact(
@@ -363,4 +377,94 @@ func (a *Agent) printAnalysis(
 			)
 		}
 	}
+}
+
+func (a *Agent) executeAction(
+	ctx context.Context,
+	action models.Action,
+) executor.Result {
+
+	if strings.HasPrefix(
+		strings.TrimSpace(action.Command),
+		"cd ",
+	) {
+		return a.changeDirectory(action.Command)
+	}
+
+	command, args, err := splitCommand(
+		action.Command,
+	)
+
+	if err != nil {
+		return executor.Result{
+			Command:  action.Command,
+			ExitCode: -1,
+			Stderr:   err.Error(),
+		}
+	}
+
+	return a.executor.Run(
+		ctx,
+		command,
+		args...,
+	)
+}
+
+func (a *Agent) changeDirectory(
+	command string,
+) executor.Result {
+
+	parts := strings.Fields(command)
+
+	if len(parts) != 2 {
+		return executor.Result{
+			Command:  command,
+			ExitCode: -1,
+			Stderr:   "invalid cd command",
+		}
+	}
+
+	dir := parts[1]
+
+	dir = expandHome(dir)
+
+	if err := a.executionContext.SetWorkingDirectory(
+		dir,
+	); err != nil {
+		return executor.Result{
+			Command:  command,
+			ExitCode: -1,
+			Stderr:   err.Error(),
+		}
+	}
+
+	return executor.Result{
+		Command:  command,
+		ExitCode: 0,
+		Stdout: fmt.Sprintf(
+			"Working directory changed to %s\n",
+			a.executionContext.WorkingDirectory,
+		),
+	}
+}
+
+func expandHome(path string) string {
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return home
+		}
+	}
+
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(
+				home,
+				path[2:],
+			)
+		}
+	}
+
+	return path
 }

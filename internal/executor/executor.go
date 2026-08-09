@@ -1,8 +1,8 @@
 package executor
 
 import (
-	"bytes"
 	"context"
+	"io"
 	"os/exec"
 )
 
@@ -13,10 +13,14 @@ type Result struct {
 	ExitCode int
 }
 
-type Executor struct{}
+type Executor struct {
+	ctx *ExecutionContext
+}
 
-func New() *Executor {
-	return &Executor{}
+func New(ctx *ExecutionContext) *Executor {
+	return &Executor{
+		ctx: ctx,
+	}
 }
 
 func (e *Executor) Run(
@@ -24,30 +28,60 @@ func (e *Executor) Run(
 	command string,
 	args ...string,
 ) Result {
-	cmd := exec.CommandContext(ctx, command, args...)
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	cmd := exec.CommandContext(
+		ctx,
+		command,
+		args...,
+	)
 
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Dir = e.ctx.WorkingDirectory
 
-	err := cmd.Run()
-
-	result := Result{
-		Command:  command,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
-		ExitCode: 0,
-	}
-
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			result.ExitCode = -1
+		return Result{
+			Command:  command,
+			ExitCode: -1,
+			Stderr:   err.Error(),
 		}
 	}
 
-	return result
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return Result{
+			Command:  command,
+			ExitCode: -1,
+			Stderr:   err.Error(),
+		}
+	}
+
+	if err := cmd.Start(); err != nil {
+		return Result{
+			Command:  command,
+			ExitCode: -1,
+			Stderr:   err.Error(),
+		}
+	}
+
+	stdoutBytes, _ := io.ReadAll(stdout)
+	stderrBytes, _ := io.ReadAll(stderr)
+
+	err = cmd.Wait()
+
+	exitCode := 0
+
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+
+	return Result{
+		Command:  command,
+		ExitCode: exitCode,
+		Stdout:   string(stdoutBytes),
+		Stderr:   string(stderrBytes),
+	}
 }
