@@ -12,6 +12,7 @@ type Config struct {
 	OpenRouterAPIKey string
 	Language         string
 	Model            string
+	MaxIterations    string
 }
 
 func Path() (string, error) {
@@ -58,10 +59,17 @@ func Load() (Config, error) {
 		model = "nvidia/nemotron-3-ultra-550b-a55b:free"
 	}
 
+	max_iterations := os.Getenv("MAX_ITERATIONS")
+
+	if max_iterations == "" {
+		max_iterations = "5"
+	}
+
 	return Config{
 		OpenRouterAPIKey: apiKey,
 		Language:         language,
 		Model:            model,
+		MaxIterations:    max_iterations,
 	}, nil
 }
 

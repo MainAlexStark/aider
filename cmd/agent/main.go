@@ -38,14 +38,14 @@ func main() {
 		cnf.Language,
 	)
 
-	ag := agent.New(llmClient)
-
 	exec := executor.New()
 
 	policy := security.DefaultPolicy()
 
+	ag := agent.New(llmClient, exec, policy)
+
 	app := cli.New(
-		&ag,
+		ag,
 		exec,
 		policy,
 	)

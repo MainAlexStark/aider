@@ -1,4 +1,4 @@
-package agent
+package models
 
 type Risk string
 
@@ -8,6 +8,14 @@ const (
 	RiskHigh     Risk = "high"
 	RiskCritical Risk = "critical"
 )
+
+type Analysis struct {
+	Problem     string   `json:"problem"`
+	Explanation string   `json:"explanation"`
+	Confidence  float64  `json:"confidence"`
+	Risk        string   `json:"risk"`
+	Actions     []Action `json:"actions"`
+}
 
 type Action struct {
 	Command string `json:"command"`

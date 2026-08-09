@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"aider/internal/models"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -132,9 +133,11 @@ type Response struct {
 func (c *Client) Analyze(
 	ctx context.Context,
 	errorText string,
-) (string, error) {
+) (models.Analysis, error) {
 	if c.apiKey == "" {
-		return "", fmt.Errorf("OPENROUTER_API_KEY is not set")
+		return models.Analysis{}, fmt.Errorf(
+			"OPENROUTER_API_KEY is not set",
+		)
 	}
 
 	reqBody := Request{
@@ -156,7 +159,10 @@ func (c *Client) Analyze(
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return models.Analysis{}, fmt.Errorf(
+			"marshal request: %w",
+			err,
+		)
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -166,26 +172,42 @@ func (c *Client) Analyze(
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return models.Analysis{}, fmt.Errorf(
+			"create request: %w",
+			err,
+		)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(
+		"Authorization",
+		"Bearer "+c.apiKey,
+	)
+
+	req.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("OpenRouter request failed: %w", err)
+		return models.Analysis{}, fmt.Errorf(
+			"OpenRouter request failed: %w",
+			err,
+		)
 	}
 
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
+		return models.Analysis{}, fmt.Errorf(
+			"read response: %w",
+			err,
+		)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf(
+		return models.Analysis{}, fmt.Errorf(
 			"OpenRouter returned %d: %s",
 			resp.StatusCode,
 			string(respBody),
@@ -194,19 +216,38 @@ func (c *Client) Analyze(
 
 	var response Response
 
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+	if err := json.Unmarshal(
+		respBody,
+		&response,
+	); err != nil {
+		return models.Analysis{}, fmt.Errorf(
+			"decode response: %w",
+			err,
+		)
 	}
 
 	if len(response.Choices) == 0 {
-		return "", fmt.Errorf("OpenRouter returned no choices")
+		return models.Analysis{}, fmt.Errorf(
+			"OpenRouter returned no choices",
+		)
 	}
 
-	// fmt.Println("RAW LLM RESPONSE:")
-	// fmt.Println(response.Choices[0].Message.Content)
-	// fmt.Println("END RAW RESPONSE")
+	content := response.Choices[0].Message.Content
 
-	return response.Choices[0].Message.Content, nil
+	var analysis models.Analysis
+
+	if err := json.Unmarshal(
+		[]byte(content),
+		&analysis,
+	); err != nil {
+		return models.Analysis{}, fmt.Errorf(
+			"decode analysis: %w; response: %s",
+			err,
+			content,
+		)
+	}
+
+	return analysis, nil
 }
 
 func (c *Client) systemPrompt() string {

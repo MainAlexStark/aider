@@ -4,6 +4,7 @@ import (
 	"aider/internal/agent"
 	"aider/internal/config"
 	"aider/internal/executor"
+	"aider/internal/models"
 	"aider/internal/security"
 	"context"
 	"fmt"
@@ -144,9 +145,10 @@ func (c *CLI) run(args []string) error {
 		result.ExitCode,
 	)
 
-	return c.agent.Analyze(
+	return c.agent.Run(
 		context.Background(),
 		result,
+		approve,
 	)
 }
 
@@ -244,7 +246,7 @@ func PrintHelp() {
 	`)
 }
 
-func printSolution(solution *agent.Solution) {
+func printSolution(solution *models.Solution) {
 	fmt.Println()
 	fmt.Println("══════════════════════════════════════")
 	fmt.Println("              ANALYSIS")
@@ -400,6 +402,18 @@ func (c *CLI) configSet(args []string) error {
 			args[1],
 		)
 
+	case "max_iterations":
+		if len(args) < 2 {
+			return fmt.Errorf(
+				"max_iterations is required",
+			)
+		}
+
+		return config.Set(
+			"MAX_ITERATIONS",
+			args[1],
+		)
+
 	case "api-key":
 		return c.setAPIKey()
 
@@ -452,6 +466,7 @@ func (c *CLI) printConfigHelp() {
 	set language <lang>  Set agent language
 	set model <model>    Set agent model
 	set api-key          Set OpenRouter API key
+	set max_iterations	 Set maximum iterations count
 
 	Examples:
 	aider config show
@@ -463,4 +478,42 @@ func (c *CLI) printConfigHelp() {
 	Options:
 	-h, --help           Show this help message
 	`)
+}
+
+func approve(
+	command string,
+	reason string,
+) bool {
+
+	fmt.Println()
+	fmt.Println("──────────────────────────────────────")
+	fmt.Println("AGENT ACTION")
+	fmt.Println("──────────────────────────────────────")
+
+	fmt.Printf(
+		"Command: %s\n",
+		command,
+	)
+
+	fmt.Printf(
+		"Reason: %s\n",
+		reason,
+	)
+
+	fmt.Print(
+		"\nExecute this command? [y/N]: ",
+	)
+
+	var answer string
+
+	if _, err := fmt.Scanln(&answer); err != nil {
+		return false
+	}
+
+	answer = strings.ToLower(
+		strings.TrimSpace(answer),
+	)
+
+	return answer == "y" ||
+		answer == "yes"
 }
