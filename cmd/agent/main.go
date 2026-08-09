@@ -6,6 +6,7 @@ import (
 
 	"aider/internal/agent"
 	"aider/internal/cli"
+	"aider/internal/config"
 	"aider/internal/executor"
 	"aider/internal/llm"
 	"aider/internal/security"
@@ -15,14 +16,15 @@ import (
 
 func main() {
 	_ = godotenv.Load()
+	config.Load()
 
 	// Здесь оставляем твою существующую
 	// загрузку конфигурации.
 
 	llmClient := llm.New(
-		os.Getenv("OPENROUTER_API_KEY"),
-		os.Getenv("OPENROUTER_MODEL"),
-		os.Getenv("LANGUAGE"),
+		config.apiKey,
+		config.model,
+		config.language,
 	)
 
 	ag := agent.New(llmClient)
