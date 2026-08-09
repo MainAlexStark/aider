@@ -16,15 +16,18 @@ import (
 
 func main() {
 	_ = godotenv.Load()
-	config.Load()
+	cnf, err := config.Load()
+	if err != nil {
+		panic(err)
+	}
 
 	// Здесь оставляем твою существующую
 	// загрузку конфигурации.
 
 	llmClient := llm.New(
-		config.apiKey,
-		config.model,
-		config.language,
+		cnf.OpenRouterAPIKey,
+		cnf.AgentModel,
+		cnf.AgentLanguage,
 	)
 
 	ag := agent.New(llmClient)
