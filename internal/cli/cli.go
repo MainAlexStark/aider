@@ -1,21 +1,21 @@
 package cli
 
 import (
+	"aider/internal/agent"
 	"aider/internal/executor"
+	"context"
 	"fmt"
 	"os"
 	"strings"
-
-	"golang.org/x/crypto/ssh/agent"
 )
 
 type CLI struct {
-	agent    *agent.Agent
+	agent    agent.Agent
 	executor *executor.Executor
 }
 
 func New(
-	agent *agent.Agent,
+	agent agent.Agent,
 	executor *executor.Executor,
 ) *CLI {
 	return &CLI{
@@ -65,7 +65,7 @@ func (c *CLI) run(args []string) error {
 	fmt.Printf("$ %s %s\n\n", command, strings.Join(commandArgs, " "))
 
 	result := c.executor.Run(
-		nil,
+		context.Background(),
 		command,
 		commandArgs...,
 	)
@@ -88,21 +88,21 @@ func (c *CLI) run(args []string) error {
 
 func (c *CLI) printUsage() {
 	fmt.Println(`
-Terminal Agent
+	Terminal Agent
 
-Usage:
+	Usage:
 
-  agent explain "<error>"
-  agent run <command> [args...]
+	agent explain "<error>"
+	agent run <command> [args...]
 
-Examples:
+	Examples:
 
-  agent explain "connection refused"
+	agent explain "connection refused"
 
-  agent run docker compose build
+	agent run docker compose build
 
-  agent run go test ./...
-`)
+	agent run go test ./...
+	`)
 }
 
 func Execute() {

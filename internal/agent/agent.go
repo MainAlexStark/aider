@@ -10,13 +10,13 @@ type Agent struct {
 	llm *llm.Client
 }
 
-func New(llmClient *llm.Client) *Agent {
-	return &Agent{
+func New(llmClient *llm.Client) Agent {
+	return Agent{
 		llm: llmClient,
 	}
 }
 
-func (a *Agent) Explain(errorText string) error {
+func (a Agent) Explain(errorText string) error {
 	fmt.Println("[agent] Analyzing error...")
 	fmt.Println()
 
@@ -30,7 +30,7 @@ func (a *Agent) Explain(errorText string) error {
 	return nil
 }
 
-func (a *Agent) Analyze(result executor.Result) error {
+func (a Agent) Analyze(result executor.Result) error {
 	fmt.Println("[agent] Analyzing error...")
 	fmt.Println()
 
