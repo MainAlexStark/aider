@@ -14,20 +14,23 @@ import (
 )
 
 type CLI struct {
-	agent    *agent.Agent
-	executor *executor.Executor
-	policy   security.Policy
+	agent            *agent.Agent
+	executor         *executor.Executor
+	executionContext *executor.ExecutionContext
+	policy           security.Policy
 }
 
 func New(
 	agent *agent.Agent,
 	executor *executor.Executor,
+	executionContext *executor.ExecutionContext,
 	policy security.Policy,
 ) *CLI {
 	return &CLI{
-		agent:    agent,
-		executor: executor,
-		policy:   policy,
+		agent:            agent,
+		executor:         executor,
+		executionContext: executionContext,
+		policy:           policy,
 	}
 }
 
@@ -89,6 +92,7 @@ func (c *CLI) run(args []string) error {
 
 	command := strings.Join(args, " ")
 
+	// Проверяем исходную команду через security policy.
 	decision, reason := security.Validate(
 		command,
 		c.policy,
@@ -123,8 +127,11 @@ func (c *CLI) run(args []string) error {
 		strings.Join(commandArgs, " "),
 	)
 
+	// Выполняем исходную команду.
+	ctx := context.Background()
+
 	result := c.executor.Run(
-		context.Background(),
+		ctx,
 		commandName,
 		commandArgs...,
 	)
@@ -132,6 +139,7 @@ func (c *CLI) run(args []string) error {
 	fmt.Print(result.Stdout)
 	fmt.Print(result.Stderr)
 
+	// Команда выполнилась успешно.
 	if result.ExitCode == 0 {
 		fmt.Println(
 			"\n✓ Command completed successfully",
@@ -145,11 +153,29 @@ func (c *CLI) run(args []string) error {
 		result.ExitCode,
 	)
 
+	// Создаём состояние агента.
+	agentContext := &agent.AgentContext{
+		OriginalCommand:  command,
+		WorkingDirectory: c.executionContext.WorkingDirectory,
+	}
+
+	// Добавляем исходную команду в историю.
+	agentContext.AddStep(
+		agent.Step{
+			Command:  result.Command,
+			ExitCode: result.ExitCode,
+			Stdout:   result.Stdout,
+			Stderr:   result.Stderr,
+		},
+	)
+
+	// Передаём управление агенту.
 	return c.agent.Run(
-		context.Background(),
-		result,
+		ctx,
+		agentContext,
 		approve,
 	)
+
 }
 
 func confirm() bool {

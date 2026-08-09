@@ -128,7 +128,7 @@ Stderr:
 
 func (a *Agent) Run(
 	ctx context.Context,
-	result executor.Result,
+	agentContext *AgentContext,
 	approve func(string, string) bool,
 ) error {
 
@@ -140,9 +140,9 @@ func (a *Agent) Run(
 			MaxIterations,
 		)
 
-		analysis, err := a.analyzeResult(
+		analysis, err := a.analyzeContext(
 			ctx,
-			result,
+			agentContext,
 		)
 
 		if err != nil {
@@ -214,10 +214,19 @@ func (a *Agent) Run(
 				continue
 			}
 
-			result = a.execute(
+			result := a.execute(
 				ctx,
 				command,
 				args,
+			)
+
+			agentContext.AddStep(
+				Step{
+					Command:  result.Command,
+					ExitCode: result.ExitCode,
+					Stdout:   result.Stdout,
+					Stderr:   result.Stderr,
+				},
 			)
 
 			fmt.Print(result.Stdout)
@@ -467,4 +476,67 @@ func expandHome(path string) string {
 	}
 
 	return path
+}
+
+func (a *Agent) analyzeContext(
+	ctx context.Context,
+	agentContext *AgentContext,
+) (models.Analysis, error) {
+
+	var builder strings.Builder
+
+	fmt.Fprintf(
+		&builder,
+		`Original command:
+%s
+
+Current working directory:
+%s
+
+Execution history:
+`,
+		agentContext.OriginalCommand,
+		agentContext.WorkingDirectory,
+	)
+
+	for i, step := range agentContext.History {
+
+		fmt.Fprintf(
+			&builder,
+			`
+--- Step %d ---
+Command:
+%s
+
+Exit code:
+%d
+
+Stdout:
+%s
+
+Stderr:
+%s
+`,
+			i+1,
+			step.Command,
+			step.ExitCode,
+			security.Redact(
+				security.LimitOutput(
+					step.Stdout,
+					a.policy.MaxOutputSize,
+				),
+			),
+			security.Redact(
+				security.LimitOutput(
+					step.Stderr,
+					a.policy.MaxOutputSize,
+				),
+			),
+		)
+	}
+
+	return a.llm.Analyze(
+		ctx,
+		builder.String(),
+	)
 }

@@ -38,6 +38,8 @@ func main() {
 		cnf.Language,
 	)
 
+	//fmt.Print(llmClient.SystemPrompt())
+
 	executionContext, err := executor.NewExecutionContext()
 	if err != nil {
 		fmt.Fprintln(
@@ -65,6 +67,7 @@ func main() {
 	app := cli.New(
 		ag,
 		exec,
+		executionContext,
 		policy,
 	)
 
