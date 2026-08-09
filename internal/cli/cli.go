@@ -51,7 +51,14 @@ func (c *CLI) explain(args []string) error {
 
 	errorText := strings.Join(args, " ")
 
-	return c.agent.Explain(errorText)
+	solution, err := c.agent.Explain(context.Background(), errorText)
+	if err != nil {
+		return err
+	}
+
+	printSolution(solution)
+
+	return nil
 }
 
 func (c *CLI) run(args []string) error {
@@ -83,7 +90,14 @@ func (c *CLI) run(args []string) error {
 		result.ExitCode,
 	)
 
-	return c.agent.Analyze(result)
+	solution, err := c.agent.Analyze(result)
+	if err != nil {
+		return err
+	}
+
+	printSolution(solution)
+
+	return nil
 }
 
 func (c *CLI) printUsage() {
@@ -108,4 +122,48 @@ func (c *CLI) printUsage() {
 func Execute() {
 	// TODO
 	_ = os.Args
+}
+
+func printSolution(solution *agent.Solution) {
+	fmt.Println()
+	fmt.Println("══════════════════════════════════════")
+	fmt.Println("              ANALYSIS")
+	fmt.Println("══════════════════════════════════════")
+
+	fmt.Printf("\nProblem:\n%s\n", solution.Problem)
+
+	fmt.Printf(
+		"\nExplanation:\n%s\n",
+		solution.Explanation,
+	)
+
+	fmt.Printf(
+		"\nConfidence: %.0f%%\n",
+		solution.Confidence*100,
+	)
+
+	fmt.Printf(
+		"Risk: %s\n",
+		solution.Risk,
+	)
+
+	if len(solution.Actions) == 0 {
+		fmt.Println("\nNo actions suggested.")
+		return
+	}
+
+	fmt.Println("\nSuggested actions:")
+
+	for i, action := range solution.Actions {
+		fmt.Printf(
+			"\n[%d] %s\n",
+			i+1,
+			action.Command,
+		)
+
+		fmt.Printf(
+			"    %s\n",
+			action.Reason,
+		)
+	}
 }
