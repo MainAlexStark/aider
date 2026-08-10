@@ -48,7 +48,7 @@ func Load() (Config, error) {
 
 	if apiKey == "" {
 		return Config{}, fmt.Errorf(
-			"OPENROUTER_API_KEY is not set",
+			"OPENROUTER_API_KEY is not set\n Use:\n  aider config set api-key <your_api_key>\n",
 		)
 	}
 	if language == "" {
