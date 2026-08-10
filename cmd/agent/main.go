@@ -1,1 +1,41 @@
-package agent
+package main
+
+import (
+	"aider/internal/cli"
+	"aider/internal/config"
+	"fmt"
+	"os"
+
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	// Прежде всего должен открыватся -h and --help
+	if len(os.Args) >= 2 &&
+		(os.Args[1] == "-h" || os.Args[1] == "--help") {
+
+		cli.PrintHelp()
+		return
+	}
+
+	// Загружаем конфиг
+	_ = godotenv.Load()
+	cnf, err := config.Load()
+	if err != nil {
+		cli.PrintConfigHelp()
+		panic(err)
+	}
+	_ = cnf
+
+	// Запускаем cli приложенения
+	app := cli.New()
+	if err := app.Run(os.Args); err != nil {
+		fmt.Fprintln(
+			os.Stderr,
+			"error:",
+			err,
+		)
+
+		os.Exit(1)
+	}
+}
