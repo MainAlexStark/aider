@@ -2,23 +2,27 @@ package cli
 
 import (
 	"aider/internal/config"
+	"aider/internal/executor"
+	"aider/internal/models"
+	"context"
 	"fmt"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type CLI struct {
 	// agent *agent.Agent
-	// executor         *executor.Executor
+	executor *executor.Executor
 	// executionContext *executor.ExecutionContext
 	// policy           security.Policy
 }
 
 func New(
-// agent *agent.Agent,
-// executor *executor.Executor,
-// executionContext *executor.ExecutionContext,
-// policy security.Policy,
+	// agent *agent.Agent,
+	executor *executor.Executor,
+	// executionContext *executor.ExecutionContext,
+	// policy security.Policy,
 ) *CLI {
 	return &CLI{
 		// agent: agent,
@@ -36,6 +40,23 @@ func (c *CLI) Run(args []string) error {
 	}
 
 	switch args[1] {
+
+	case "explain":
+		if len(args) >= 3 &&
+			(args[2] == "-h" || args[2] == "--help") {
+			printExplainHelp()
+			return nil
+		}
+
+		return c.explain(args[2:])
+
+	case "explainplus":
+		if len(args) >= 3 &&
+			(args[2] == "-h" || args[2] == "--help") {
+			printExplainPlusHelp()
+			return nil
+		}
+		return c.explainPlus(args[2:])
 
 	case "config":
 		return c.config(args[2:])
@@ -100,6 +121,115 @@ func PrintConfigHelp() {
 	`)
 }
 
+func printExplainHelp() {
+	fmt.Println(`
+	Usage:
+	aider explain "<error>"
+
+	Description:
+	Analyze an error using the configured AI model
+	and provide an explanation and possible solution.
+
+	Examples:
+	aider explain "connection refused"
+
+	aider explain "docker compose build fails with TLS handshake timeout"
+
+	aider explain "go test fails with undefined: foo"
+
+	Options:
+	-h, --help    Show this help message
+	`)
+}
+
+func printExplainPlusHelp() {
+	fmt.Println(`
+	Usage:
+	aider explainplus <command>
+
+	Description:
+	Execute a command, analyze its output and errors using the configured AI model,
+	and provide an explanation and possible solution.
+
+	Examples:
+	aider explainplus docker compose up
+
+	Options:
+	-h, --help    Show this help message
+	`)
+}
+
+// Run command
+func (c *CLI) run_command(args []string) (models.Result, error) {
+	if len(args) == 0 {
+		return models.Result{}, fmt.Errorf("command is required")
+	}
+
+	command := strings.Join(args, " ")
+	// TODO добавить проверку на запрещенные команды
+	_ = command
+
+	commandName := args[0]
+	commandArgs := args[1:]
+
+	fmt.Printf(
+		"$ %s %s\n\n",
+		commandName,
+		strings.Join(commandArgs, " "),
+	)
+
+	// Выполняем исходную команду.
+	ctx := context.Background()
+
+	result := c.executor.Run(
+		ctx,
+		commandName,
+		commandArgs...,
+	)
+
+	fmt.Print(result.Stdout)
+	fmt.Print(result.Stderr)
+
+	// Команда выполнилась успешно.
+	if result.ExitCode == 0 {
+		fmt.Println(
+			"\n✅Command completed successfully",
+		)
+
+		return models.Result{}, nil
+	}
+
+	return result, nil
+}
+
+// Explain mode commands
+func (c *CLI) explain(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("error message is required")
+	}
+
+	errorText := strings.Join(args, " ")
+	_ = errorText
+
+	return nil
+}
+
+func (c *CLI) explainPlus(args []string) error {
+	// Выполняем команду и получаем результат
+	result, err := c.run_command(args)
+	if err != nil {
+		return err
+	}
+
+	// Если команда выполнилась успешно - объяснять нечего.
+	if result.ExitCode == 0 {
+		return nil
+	}
+
+	return c.explain([]string{result.Stderr})
+}
+
+// config handles the "config" command and its subcommands.
 func (c *CLI) config(args []string) error {
 	// Если нет аргументов - возвращаем помощь
 	if len(args) == 0 {
