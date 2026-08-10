@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"aider/internal/agent"
 	"aider/internal/config"
+	"aider/internal/contexts"
 	"aider/internal/executor"
 	"aider/internal/models"
 	"context"
@@ -12,22 +14,22 @@ import (
 )
 
 type CLI struct {
-	// agent *agent.Agent
-	executor *executor.Executor
-	// executionContext *executor.ExecutionContext
+	agent     *agent.Agent
+	executor  *executor.Executor
+	agent_ctx *contexts.AgentContext
 	// policy           security.Policy
 }
 
 func New(
-	// agent *agent.Agent,
+	agent *agent.Agent,
 	executor *executor.Executor,
-	// executionContext *executor.ExecutionContext,
+	executionContext *contexts.AgentContext,
 	// policy security.Policy,
 ) *CLI {
 	return &CLI{
-		// agent: agent,
-		// executor:         executor,
-		// executionContext: executionContext,
+		agent:     agent,
+		executor:  executor,
+		agent_ctx: executionContext,
 		// policy:           policy,
 	}
 }
@@ -159,6 +161,50 @@ func printExplainPlusHelp() {
 	`)
 }
 
+func printSolution(solution *models.Solution) {
+	fmt.Println()
+	fmt.Println("══════════════════════════════════════")
+	fmt.Println("              ANALYSIS")
+	fmt.Println("══════════════════════════════════════")
+
+	fmt.Printf("\nProblem:\n%s\n", solution.Problem)
+
+	fmt.Printf(
+		"\nExplanation:\n%s\n",
+		solution.Explanation,
+	)
+
+	fmt.Printf(
+		"\nConfidence: %.0f%%\n",
+		solution.Confidence*100,
+	)
+
+	fmt.Printf(
+		"Risk: %s\n",
+		solution.Risk,
+	)
+
+	if len(solution.Actions) == 0 {
+		fmt.Println("\nNo actions suggested.")
+		return
+	}
+
+	fmt.Println("\nSuggested actions:")
+
+	for i, action := range solution.Actions {
+		fmt.Printf(
+			"\n[%d] %s\n",
+			i+1,
+			action.Command,
+		)
+
+		fmt.Printf(
+			"    %s\n",
+			action.Reason,
+		)
+	}
+}
+
 // Run command
 func (c *CLI) run_command(args []string) (models.Result, error) {
 	if len(args) == 0 {
@@ -209,12 +255,22 @@ func (c *CLI) explain(args []string) error {
 	}
 
 	errorText := strings.Join(args, " ")
-	_ = errorText
+
+	// Указывем что исходной комманды нет
+	c.agent_ctx.OriginalCommand = "Not original command, only error message provided"
+
+	solution, err := c.agent.Explain(context.Background(), errorText)
+	if err != nil {
+		return err
+	}
+
+	printSolution(solution)
 
 	return nil
 }
 
 func (c *CLI) explainPlus(args []string) error {
+	command := strings.Join(args, " ")
 	// Выполняем команду и получаем результат
 	result, err := c.run_command(args)
 	if err != nil {
@@ -225,6 +281,8 @@ func (c *CLI) explainPlus(args []string) error {
 	if result.ExitCode == 0 {
 		return nil
 	}
+
+	c.agent_ctx.OriginalCommand = command
 
 	return c.explain([]string{result.Stderr})
 }

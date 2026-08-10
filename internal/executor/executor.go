@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"aider/internal/contexts"
 	"aider/internal/models"
 	"context"
 	"io"
@@ -8,13 +9,11 @@ import (
 )
 
 type Executor struct {
-	ctx *ExecutionContext
+	agent_ctx *contexts.AgentContext
 }
 
-func New(ctx *ExecutionContext) *Executor {
-	return &Executor{
-		ctx: ctx,
-	}
+func New(agent_ctx *contexts.AgentContext) *Executor {
+	return &Executor{agent_ctx}
 }
 
 func (e *Executor) Run(
@@ -29,7 +28,7 @@ func (e *Executor) Run(
 		args...,
 	)
 
-	cmd.Dir = e.ctx.WorkingDirectory
+	cmd.Dir = e.agent_ctx.WorkingDirectory
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

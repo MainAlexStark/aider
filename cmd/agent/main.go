@@ -1,9 +1,12 @@
 package main
 
 import (
+	"aider/internal/agent"
 	"aider/internal/cli"
 	"aider/internal/config"
+	"aider/internal/contexts"
 	"aider/internal/executor"
+	"aider/internal/llm"
 	"fmt"
 	"os"
 
@@ -28,24 +31,43 @@ func main() {
 	}
 	_ = cnf
 
-	// Инициализируем контекст для executor
-	executionContext, err := executor.NewExecutionContext()
+	// Инициализируем контекст агента
+	agentContext, err := contexts.NewAgentContext()
 	if err != nil {
 		fmt.Fprintln(
 			os.Stderr,
-			"failed to create execution context:",
+			"error:",
 			err,
 		)
-
 		os.Exit(1)
 	}
+
 	// Инициализируем executor
 	exec := executor.New(
-		executionContext,
+		agentContext,
+	)
+
+	// Инициализируем клиент OpenRouter
+	llmClient := llm.New(
+		cnf.OpenRouterAPIKey,
+		cnf.Model,
+		cnf.Language,
+	)
+
+	// Иницализируем агента
+	agent := agent.New(
+		llmClient,
+		exec,
+		agentContext,
 	)
 
 	// Запускаем cli приложенения
-	app := cli.New(exec)
+	app := cli.New(
+		agent,
+		exec,
+		agentContext,
+	)
+
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(
 			os.Stderr,
