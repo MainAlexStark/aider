@@ -3,6 +3,7 @@ package main
 import (
 	"aider/internal/cli"
 	"aider/internal/config"
+	"aider/internal/executor"
 	"fmt"
 	"os"
 
@@ -27,8 +28,24 @@ func main() {
 	}
 	_ = cnf
 
+	// Инициализируем контекст для executor
+	executionContext, err := executor.NewExecutionContext()
+	if err != nil {
+		fmt.Fprintln(
+			os.Stderr,
+			"failed to create execution context:",
+			err,
+		)
+
+		os.Exit(1)
+	}
+	// Инициализируем executor
+	exec := executor.New(
+		executionContext,
+	)
+
 	// Запускаем cli приложенения
-	app := cli.New()
+	app := cli.New(exec)
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(
 			os.Stderr,
