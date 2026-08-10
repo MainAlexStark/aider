@@ -68,3 +68,61 @@ func Load() (Config, error) {
 		MaxIterations:    maxIterations,
 	}, nil
 }
+
+func Set(
+	key string,
+	value string,
+) error {
+	configPath, err := Path()
+	if err != nil {
+		return err
+	}
+
+	configDir := filepath.Dir(configPath)
+
+	if err := os.MkdirAll(
+		configDir,
+		0700,
+	); err != nil {
+		return err
+	}
+
+	data := map[string]string{}
+
+	// Получаем текущие данные
+	if _, err := os.Stat(configPath); err == nil {
+		existing, err := godotenv.Read(configPath)
+		if err != nil {
+			return err
+		}
+
+		data = existing
+	}
+
+	// Устанавливаем новое значение
+	data[key] = value
+	file, err := os.Create(configPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Выводим конфиг
+	for k, v := range data {
+		if _, err := fmt.Fprintf(
+			file,
+			"%s=%s\n",
+			k,
+			v,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Только владелец может читать конфиг.
+	return os.Chmod(
+		configPath,
+		0600,
+	)
+
+}
