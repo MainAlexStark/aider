@@ -7,6 +7,7 @@ import (
 	"aider/internal/contexts"
 	"aider/internal/executor"
 	"aider/internal/llm"
+	"aider/internal/security"
 	"fmt"
 	"os"
 
@@ -49,16 +50,29 @@ func main() {
 
 	// Инициализируем клиент OpenRouter
 	llmClient := llm.New(
+		agentContext,
 		cnf.OpenRouterAPIKey,
 		cnf.Model,
 		cnf.Language,
 	)
+
+	// Инициализируем правила
+	policy := security.Policy{
+		MaxCommandLength:    4096,
+		MaxOutputSize:       32 * 1024,
+		AllowShell:          false,
+		AllowSudo:           false,
+		AllowNetwork:        true,
+		AllowPackageInstall: true,
+	}
 
 	// Иницализируем агента
 	agent := agent.New(
 		llmClient,
 		exec,
 		agentContext,
+		cnf.MaxIterations,
+		policy,
 	)
 
 	// Запускаем cli приложенения
@@ -66,6 +80,7 @@ func main() {
 		agent,
 		exec,
 		agentContext,
+		policy,
 	)
 
 	if err := app.Run(os.Args); err != nil {

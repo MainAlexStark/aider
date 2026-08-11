@@ -6,6 +6,7 @@ import (
 	"aider/internal/contexts"
 	"aider/internal/executor"
 	"aider/internal/models"
+	"aider/internal/security"
 	"context"
 	"fmt"
 	"strings"
@@ -17,20 +18,20 @@ type CLI struct {
 	agent     *agent.Agent
 	executor  *executor.Executor
 	agent_ctx *contexts.AgentContext
-	// policy           security.Policy
+	policy    security.Policy
 }
 
 func New(
 	agent *agent.Agent,
 	executor *executor.Executor,
 	executionContext *contexts.AgentContext,
-	// policy security.Policy,
+	policy security.Policy,
 ) *CLI {
 	return &CLI{
 		agent:     agent,
 		executor:  executor,
 		agent_ctx: executionContext,
-		// policy:           policy,
+		policy:    policy,
 	}
 }
 
@@ -42,6 +43,15 @@ func (c *CLI) Run(args []string) error {
 	}
 
 	switch args[1] {
+
+	case "run":
+		if len(args) >= 3 &&
+			(args[2] == "-h" || args[2] == "--help") {
+			printRunHelp()
+			return nil
+		}
+
+		return c.run(args[2:])
 
 	case "explain":
 		if len(args) >= 3 &&
@@ -161,59 +171,121 @@ func printExplainPlusHelp() {
 	`)
 }
 
-func printSolution(solution *models.Solution) {
+func printRunHelp() {
+	fmt.Println(`
+	Usage:
+	aider run <command> [arguments...]
+
+	Description:
+	Execute a terminal command.
+	If the command fails, Aider analyzes the error
+	and suggests a solution.
+
+	Security:
+	Commands are checked by the security layer before execution.
+	Potentially dangerous commands require confirmation.
+	Some commands are blocked completely.
+
+	Examples:
+	aider run echo hello
+	aider run go test ./...
+	aider run docker compose build
+	aider run git status
+
+	Options:
+	-h, --help    Show this help message
+	`)
+}
+
+func approve(
+	command string,
+	reason string,
+) bool {
+
 	fmt.Println()
-	fmt.Println("══════════════════════════════════════")
-	fmt.Println("              ANALYSIS")
-	fmt.Println("══════════════════════════════════════")
-
-	fmt.Printf("\nProblem:\n%s\n", solution.Problem)
+	fmt.Println("──────────────────────────────────────")
+	fmt.Println("AGENT ACTION")
+	fmt.Println("──────────────────────────────────────")
 
 	fmt.Printf(
-		"\nExplanation:\n%s\n",
-		solution.Explanation,
+		"Command: %s\n",
+		command,
 	)
 
 	fmt.Printf(
-		"\nConfidence: %.0f%%\n",
-		solution.Confidence*100,
+		"Reason: %s\n",
+		reason,
 	)
 
-	fmt.Printf(
-		"Risk: %s\n",
-		solution.Risk,
+	fmt.Print(
+		"\nExecute this command? [y/N]: ",
 	)
 
-	if len(solution.Actions) == 0 {
-		fmt.Println("\nNo actions suggested.")
-		return
+	var answer string
+
+	if _, err := fmt.Scanln(&answer); err != nil {
+		return false
 	}
 
-	fmt.Println("\nSuggested actions:")
+	answer = strings.ToLower(
+		strings.TrimSpace(answer),
+	)
 
-	for i, action := range solution.Actions {
-		fmt.Printf(
-			"\n[%d] %s\n",
-			i+1,
-			action.Command,
-		)
+	return answer == "y" ||
+		answer == "yes"
+}
 
-		fmt.Printf(
-			"    %s\n",
-			action.Reason,
-		)
+func confirm() bool {
+	fmt.Print("\nExecute command? [y/N]: ")
+
+	var answer string
+
+	_, err := fmt.Scanln(&answer)
+	if err != nil {
+		return false
 	}
+
+	answer = strings.ToLower(
+		strings.TrimSpace(answer),
+	)
+
+	return answer == "y" ||
+		answer == "yes"
 }
 
 // Run command
-func (c *CLI) run_command(args []string) (models.Result, error) {
+func (c *CLI) run_command(args []string) (models.Result, error, *context.Context) {
 	if len(args) == 0 {
-		return models.Result{}, fmt.Errorf("command is required")
+		return models.Result{}, fmt.Errorf("command is required"), nil
 	}
 
 	command := strings.Join(args, " ")
-	// TODO добавить проверку на запрещенные команды
-	_ = command
+
+	// Проверяем исходную команду через security policy.
+	decision, reason := security.Validate(
+		command,
+		c.policy,
+	)
+
+	switch decision {
+
+	case security.DecisionBlock:
+		fmt.Println()
+		fmt.Println("[SECURITY BLOCKED]")
+		fmt.Println(reason)
+
+		return models.Result{}, nil, nil
+
+	case security.DecisionApproval:
+		fmt.Println()
+		fmt.Println("[SECURITY WARNING]")
+		fmt.Println(reason)
+
+		if !confirm() {
+			fmt.Println("Execution cancelled.")
+			return models.Result{}, nil, nil
+		}
+	}
 
 	commandName := args[0]
 	commandArgs := args[1:]
@@ -242,10 +314,46 @@ func (c *CLI) run_command(args []string) (models.Result, error) {
 			"\n✅Command completed successfully",
 		)
 
-		return models.Result{}, nil
+		return models.Result{}, nil, &ctx
 	}
 
-	return result, nil
+	return result, nil, &ctx
+}
+
+// Run mode commands
+func (c *CLI) run(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("command is required")
+	}
+	command := strings.Join(args, " ")
+
+	result, err, ctx := c.run_command(args)
+	if err != nil {
+		return err
+	}
+
+	// Если команда выполнилась успешно - объяснять нечего.
+	if result.ExitCode == 0 {
+		return nil
+	}
+
+	c.agent_ctx.OriginalCommand = command
+
+	// Добавляем исходную команду в историю.
+	c.agent_ctx.AddStep(
+		contexts.Step{
+			Command:  result.Command,
+			ExitCode: result.ExitCode,
+			Stdout:   result.Stdout,
+			Stderr:   result.Stderr,
+		},
+	)
+
+	// Передаём управление агенту.
+	return c.agent.Run(
+		ctx,
+		approve,
+	)
 }
 
 // Explain mode commands
@@ -264,7 +372,7 @@ func (c *CLI) explain(args []string) error {
 		return err
 	}
 
-	printSolution(solution)
+	solution.PrintSolution()
 
 	return nil
 }
@@ -272,7 +380,7 @@ func (c *CLI) explain(args []string) error {
 func (c *CLI) explainPlus(args []string) error {
 	command := strings.Join(args, " ")
 	// Выполняем команду и получаем результат
-	result, err := c.run_command(args)
+	result, err, _ := c.run_command(args)
 	if err != nil {
 		return err
 	}
@@ -282,9 +390,16 @@ func (c *CLI) explainPlus(args []string) error {
 		return nil
 	}
 
-	c.agent_ctx.OriginalCommand = command
+	error_str := fmt.Sprintf("Command: %s,\nError: %s", command, result.Stderr)
 
-	return c.explain([]string{result.Stderr})
+	solution, err := c.agent.Explain(context.Background(), error_str)
+	if err != nil {
+		return err
+	}
+
+	solution.PrintSolution()
+
+	return err
 }
 
 // config handles the "config" command and its subcommands.

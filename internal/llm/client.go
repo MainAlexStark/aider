@@ -27,10 +27,11 @@ type JSONSchemaSpec struct {
 }
 
 type Client struct {
-	apiKey   string
-	model    string
-	language string
-	client   *http.Client
+	agentContext *contexts.AgentContext
+	apiKey       string
+	model        string
+	language     string
+	client       *http.Client
 }
 
 func solutionSchema() ResponseFormat {
@@ -105,12 +106,13 @@ func solutionSchema() ResponseFormat {
 	}
 }
 
-func New(apiKey string, model string, language string) *Client {
+func New(agentContext *contexts.AgentContext, apiKey string, model string, language string) *Client {
 	return &Client{
-		apiKey:   apiKey,
-		model:    model,
-		language: language,
-		client:   &http.Client{},
+		agentContext: agentContext,
+		apiKey:       apiKey,
+		model:        model,
+		language:     language,
+		client:       &http.Client{},
 	}
 }
 
@@ -162,7 +164,7 @@ func (c *Client) Analize(
 			},
 			{
 				Role:    "user",
-				Content: userContent(errorText, agent_context),
+				Content: errorText,
 			},
 		},
 
